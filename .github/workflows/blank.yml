@@ -1,0 +1,94 @@
+```yaml
+name: PC Gamer BR - Low Ping RDP Tailscale
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  criar-vm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login Azure
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Criar VM Brasil
+        env:
+          TS_KEY: ${{ secrets.TS_AUTHKEY }}
+        shell: bash
+        run: |
+          RG="rg-gamer-br"
+          LOC="brazilsouth"
+          VM="vm-gamer-br"
+          USER="gameradmin"
+
+          az group create -n "$RG" -l "$LOC"
+
+          az network vnet create \
+            -g "$RG" -n "vnet-gamer-br" \
+            --address-prefix 10.20.0.0/16 \
+            --subnet-name default \
+            --subnet-prefix 10.20.0.0/24
+
+          az network nsg create \
+            -g "$RG" -n "nsg-gamer-br"
+
+          az network nsg rule create \
+            -g "$RG" --nsg-name "nsg-gamer-br" \
+            -n "Tailscale-UDP-41641" \
+            --priority 100 \
+            --source-address-prefixes Internet \
+            --destination-port-ranges 41641 \
+            --protocol Udp \
+            --access Allow
+
+          az network nsg rule create \
+            -g "$RG" --nsg-name "nsg-gamer-br" \
+            -n "RDP-Tailscale" \
+            --priority 110 \
+            --source-address-prefixes VirtualNetwork \
+            --destination-port-ranges 3389 \
+            --protocol Tcp \
+            --access Allow
+
+          az vm create \
+            -g "$RG" -n "$VM" \
+            -l "$LOC" \
+            --image Win2022Datacenter \
+            --size Standard_NV36ads_A10_v5 \
+            --admin-username "$USER" \
+            --vnet-name "vnet-gamer-br" \
+            --subnet default \
+            --nsg "nsg-gamer-br" \
+            --public-ip-sku Standard \
+            --storage-sku Premium_LRS \
+            --accelerated-networking true
+
+          az vm run-command invoke \
+            -g "$RG" -n "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts "
+              param([string]\$KEY)
+              \$url='https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi'
+              \$msi='\$env:TEMP\tailscale.msi'
+              Invoke-WebRequest \$url -OutFile \$msi
+              Start-Process msiexec.exe -ArgumentList '/i',\$msi,'/qn' -Wait
+              \$ts='C:\Program Files\Tailscale\tailscale.exe'
+              & \$ts up --accept-dns=false --auth-key=\$KEY
+              & \$ts set --unattended=true
+              Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+              Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+              & \$ts ip -4
+            " \
+            --parameters "KEY=$TS_KEY"
+
+          az vm list-ip-addresses \
+            -g "$RG" -n "$VM" -o table
+```
