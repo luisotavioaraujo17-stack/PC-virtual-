@@ -1,12 +1,12 @@
 #!/bin/bash
-VM="PC-Virtual"
-DISK="pcvirtual.qcow2"
+VM="PC-Gamer"
+DISK="pc-gamer.qcow2"
 ISO="Windows.iso"
-RAM="16G"
-CPU="8"
-DISK_SIZE="120G"
+RAM="32G"
+CPU="12"
+SIZE="250G"
 UEFI="/usr/share/OVMF/OVMF_CODE.fd"
-qemu-img create -f qcow2 "$DISK" "$DISK_SIZE"
+qemu-img create -f qcow2 "$DISK" "$SIZE"
 qemu-system-x86_64 \
 -enable-kvm \
 -machine q35,accel=kvm \
@@ -15,27 +15,23 @@ qemu-system-x86_64 \
 -smp "$CPU" \
 -m "$RAM" \
 -drive if=pflash,format=raw,readonly=on,file="$UEFI" \
--drive file="$DISK",if=none,id=disk0,format=qcow2 \
--device virtio-blk-pci,drive=disk0 \
+-drive file="$DISK",if=none,id=nvme0,format=qcow2,cache=none,aio=native \
+-device nvme,drive=nvme0,serial=PCVIRTUAL \
 -cdrom "$ISO" \
 -device virtio-net-pci,netdev=net0 \
 -netdev user,id=net0 \
 -device virtio-balloon-pci \
 -device virtio-rng-pci \
--usb \
 -device usb-tablet \
--vga virtio \
+-device virtio-vga \
 -display gtk \
 -boot order=d \
--monitor stdio \
 -no-reboot \
--nodefaults \
--device ich9-ahci,id=sata \
--device virtio-scsi-pci,id=scsi0 \
--drive if=none,id=extra,format=qcow2,file=extra.qcow2 \
--device scsi-hd,drive=extra \
+-monitor stdio \
+-object iothread,id=iothread0 \
+-device virtio-scsi-pci,id=scsi0,iothread=iothread0 \
 -device virtio-serial-pci \
--chardev spicevmc,id=vdagent,name=vdagent \
--device virtserialport,chardev=vdagent,name=com.redhat.spice.0 \
--spice port=5930,disable-ticketing=on \
--device virtio-vga \
+-device virtio-keyboard-pci \
+-device virtio-mouse-pci \
+-device virtio-rng-pci \
+-audiodev driver=none,id=noaudio \
