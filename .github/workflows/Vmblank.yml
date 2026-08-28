@@ -1,0 +1,64 @@
+```yaml
+name: VM Gamer BR - RDP Tailscale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  criar-vm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Criar VM Brasil
+        env:
+          TS_KEY: ${{ secrets.TS_AUTHKEY }}
+        run: |
+          RG="rg-gamer-br"
+          LOC="brazilsouth"
+          VM="vm-gamer-br"
+          USER="gameradmin"
+
+          az group create -n "$RG" -l "$LOC"
+
+          az vm create \
+            -g "$RG" \
+            -n "$VM" \
+            -l "$LOC" \
+            --image Win2022Datacenter \
+            --size Standard_D4s_v5 \
+            --admin-username "$USER" \
+            --public-ip-sku Standard
+
+          az vm run-command invoke \
+            -g "$RG" \
+            -n "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts "
+              \$u='https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi'
+              \$m='\$env:TEMP\tailscale.msi'
+              Invoke-WebRequest \$u -OutFile \$m
+              Start-Process msiexec.exe -ArgumentList '/i',\$m,'/qn' -Wait
+
+              & 'C:\Program Files\Tailscale\tailscale.exe' `
+                up --accept-dns=false --auth-key='$TS_KEY'
+
+              Set-ItemProperty `
+                'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+                -Name fDenyTSConnections -Value 0
+
+              Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+
+              & 'C:\Program Files\Tailscale\tailscale.exe' ip -4
+            "
+
+      - name: Mostrar VM
+        run: |
+          az vm list-ip-addresses \
+            -g rg-gamer-br \
+            -n vm-gamer-br \
+            -o table
+```
