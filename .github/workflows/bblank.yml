@@ -1,36 +1,52 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
-
-# Controls when the workflow will run
+name: VM Gamer RDP BR
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+  windows-gamer:
+    runs-on: windows-latest
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Sistema
+        shell: powershell
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          Write-Host "Preparando VM Gamer..."
+          Get-ComputerInfo | Select-Object WindowsProductName
+      - name: Região Brasil
+        shell: powershell
+        run: |
+          Set-Culture pt-BR
+          Set-WinSystemLocale pt-BR
+          Set-WinHomeLocation -GeoId 32
+      - name: RDP
+        shell: powershell
+        run: |
+          Get-Service TermService
+          Get-NetFirewallRule -DisplayGroup "Remote Desktop"
+      - name: GPU
+        shell: powershell
+        run: |
+          Get-CimInstance Win32_VideoController |
+            Select-Object Name,DriverVersion
+      - name: CPU
+        shell: powershell
+        run: |
+          Get-CimInstance Win32_Processor |
+            Select-Object Name,NumberOfCores
+      - name: RAM
+        shell: powershell
+        run: |
+          $ram = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+          Write-Host "RAM: $([math]::Round($ram/1GB,2)) GB"
+      - name: DirectX
+        shell: powershell
+        run: |
+          dxdiag /t C:\dxdiag.txt
+          Write-Host "DirectX verificado"
+      - name: Pasta Gamer
+        shell: powershell
+        run: |
+          New-Item C:\GamerVM -ItemType Directory -Force
+          Write-Host "Ambiente criado"
+      - name: Final
+        run: |
+          echo "VM Gamer PT-BR preparada"
+          echo "RDP verificado"
