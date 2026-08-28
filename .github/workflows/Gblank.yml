@@ -1,0 +1,52 @@
+```yaml
+name: PC Virtual V3 Brasil - RDP Tailscale
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  criar-v3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login Azure
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Criar VM V3
+        env:
+          TS_KEY: ${{ secrets.TS_AUTHKEY }}
+        shell: bash
+        run: |
+          RG="rg-v3-br"
+          LOC="brazilsouth"
+          VM="vm-v3-br"
+          USER="rdpadmin"
+          az group create -n "$RG" -l "$LOC"
+          az vm create -g "$RG" -n "$VM" -l "$LOC" \
+            --image Win2022Datacenter \
+            --size Standard_NV12s_v3 \
+            --admin-username "$USER" \
+            --public-ip-sku Standard \
+            --storage-sku Premium_LRS
+          az vm run-command invoke -g "$RG" -n "$VM" \
+            --command-id RunPowerShellScript \
+            --scripts '
+              param([string]$TS_KEY)
+              $u="https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+              $m="$env:TEMP\tailscale.msi"
+              Invoke-WebRequest $u -OutFile $m
+              Start-Process msiexec.exe -ArgumentList "/i",$m,"/qn" -Wait
+              & "C:\Program Files\Tailscale\tailscale.exe" up --accept-dns=false --auth-key=$TS_KEY
+              & "C:\Program Files\Tailscale\tailscale.exe" up --unattended=true
+              Set-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -Value 0
+              Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+              & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+            ' --parameters "TS_KEY=$TS_KEY"
+      - name: Informações
+        run: |
+          az vm show -g "$RG" -n "$VM" --show-details
+          az vm list-ip-addresses -g "$RG" -n "$VM" -o table
+```
